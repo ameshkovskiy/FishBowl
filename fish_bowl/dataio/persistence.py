@@ -248,6 +248,8 @@ class SimulationClient(SQLAlchemyQueries):
         :return:
         """
         scope = list(update_dict.keys())
+        if len(scope) == 0: # AM speed-up: do nothing if nothing to update
+            return
         with self.session_scope() as s:
             animal_list = s.query(Animals).filter(Animals.sim_id == sim_id, Animals.alive).all()
             for animal in animal_list:
@@ -260,20 +262,22 @@ class SimulationClient(SQLAlchemyQueries):
             s.flush()
         return
 
-    def kill_animal(self, sim_id: int, animal_ids: List[int]):
+    def kill_animal(self, sim_id: int, animal_ids: List[int]) -> set:
         """
         Set alive property to False
         :param sim_id:
         :param animal_ids:
-        :return:
+        :return: set with coord tuples to remove (will need to update list of occupied coordinates)
         """
         with self.session_scope() as s:
             animal_list = s.query(Animals).filter(Animals.sim_id == sim_id, Animals.alive).all()
+            coord_set = set()
             for animal in animal_list:
                 if animal.oid in animal_ids:
                     animal.alive = False
+                    coord_set.add((animal.coord_x, animal.coord_y))
             s.flush()
-        return
+        return coord_set
 
     def eat_animal_in_square(self, sim_id: int, coordinate: SquareGridCoordinate):
         """
@@ -294,24 +298,33 @@ class SimulationClient(SQLAlchemyQueries):
                 _logger.warning('No Fish to eat in {}'.format(coordinate))
                 return False
 
-    def move_animal(self, sim_id: int, animal_id: int, new_position: SquareGridCoordinate):
+    def move_animal(self, sim_id: int, animal_id: int,
+                    new_position: SquareGridCoordinate, occupied: bool=None):
         """
 
         :param sim_id:
         :param animal_id:
         :param new_position:
+        :param occupied: optional (passed if know in advance that position is occupied
+         in order to avoid unnecessary call of self.coordinate_is_occupied())
         :return:
         """
-        if self.coordinate_is_occupied(sim_id=sim_id, coordinate=new_position):
-            raise NonEmptyCoordinate('Cannot move, coordinate {} is occupied'.format(new_position))
+        if occupied is None:
+            if self.coordinate_is_occupied(sim_id=sim_id, coordinate=new_position):
+                raise NonEmptyCoordinate('Cannot move, coordinate {} is occupied'.format(new_position))
 
-        with self.session_scope() as s:
-            simulation = s.query(Simulation).filter(Simulation.sid == sim_id).one()
-            # Check coordinate match with the grid
-            square_grid_valid(grid_size=simulation.grid_size, coordinates=new_position)
-            a_ = s.query(Animals).filter(Animals.sim_id == sim_id, Animals.oid == animal_id).one()
-            if a_.alive:
-                a_.coord_x = new_position.x
-                a_.coord_y = new_position.y
-            else:
-                raise ImpossibleAction('Attempting to move a dead animal: {}'.format(a_))
+        if occupied:
+            raise NonEmptyCoordinate('Cannot move, coordinate {} is occupied'.format(new_position))
+        else:
+            with self.session_scope() as s:
+                simulation = s.query(Simulation).filter(Simulation.sid == sim_id).one()
+                # Check coordinate match with the grid
+                square_grid_valid(grid_size=simulation.grid_size, coordinates=new_position)
+                a_ = s.query(Animals).filter(Animals.sim_id == sim_id, Animals.oid == animal_id).one()
+                if a_.alive:
+                    out = (a_.coord_x, a_.coord_y)
+                    a_.coord_x = new_position.x
+                    a_.coord_y = new_position.y
+                    return out
+                else:
+                    raise ImpossibleAction('Attempting to move a dead animal: {}'.format(a_))
