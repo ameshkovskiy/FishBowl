@@ -19,8 +19,10 @@ POOL_SIZE = 1  # 1 for monothreaded, otherwise should be number of threads
 @event.listens_for(Engine, "connect")
 def _set_sqlite_pragma(dbapi_connection, connection_record):
     if isinstance(dbapi_connection, SQLite3Connection):
-        cursor =dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_key=OM;")
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON;") # AM: I guess it is ON instead of OM; Can potentially turn off for slightly speeding up
+        cursor.execute("PRAGMA synchronous = OFF;") # this is for speeding things up (not good if crashes like power shutdown)
+        # cursor.execute("PRAGMA journal_mode = OFF;") # uncomment for speeding things up even more a little bit
         cursor.close()
 
 
@@ -77,11 +79,13 @@ class SQLAlchemyQueries:
         _logger.info('Using <{}>'.format(blank_password(database_url)))
         if 'sqlite' in database_url:
             # no pool recycling for in-memory sqlite, disable it
-            self._engine = create_engine(database_url, pool_recycle=-1)
+            self._engine = create_engine(database_url, pool_recycle=-1, echo=False) # no echo-ing; let's try to optimize all we can
         else:
             kwargs = {'pool_recycle': POOL_RECYCLE, 'pool_size': POOL_SIZE}
-            self.engine = create_engine(database_url, **kwargs)
-        self._session_maker = sessionmaker(bind=self._engine, expire_on_commit=expire_on_commit)
+            self.engine = create_engine(database_url, echo=False, **kwargs)
+        self._session_maker = sessionmaker(bind=self._engine,
+                                           # autoflush=False, # AM: uncomment, if want to speed up a little bit more
+                                           expire_on_commit=expire_on_commit)
         if declarative_base:
             declarative_base.metadata.create_all(bind=self._engine, checkfirst=True)
 
