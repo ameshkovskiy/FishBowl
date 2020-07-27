@@ -8,12 +8,13 @@ from fish_bowl.common.config_reader import read_simulation_config
 from fish_bowl.process.simple_display import display_simple_grid
 
 _logger = logging.getLogger(__name__)
-
+# Let's store all actions and stats into a log file
+logging.basicConfig(filename='debug_stats.log', level=logging.DEBUG)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d:%(message)s")
     cmd_parser = argparse.ArgumentParser()
-    cmd_parser.add_argument('--config_name', default='simulation_config_1',
+    cmd_parser.add_argument('--config_name', default='simulation_config_AM',
                             help='Simulation configuration file name')
     cmd_parser.add_argument('--max_turn', default=100, type=int, help='Maximum number of turns for the simulation')
     cmd_parser.add_argument('--config_path', default=None, type=str,
@@ -27,12 +28,16 @@ if __name__ == '__main__':
     # Load simulation configuration
     sim_config = read_simulation_config(args.config_name)
     # Instantiate client
-    client = SimulationClient(get_database_string())
+    # client = SimulationClient(get_database_string())
+    client = SimulationClient('sqlite:///:memory:') # use RAM, grids so far do not seem to be large; for extremely large need to change architecture as well
     # display initial grid
     grid = SimulationGrid(persistence=client, simulation_parameters=sim_config)
     print(display_simple_grid(client.get_animals_df(grid._sid), grid_size=sim_config['grid_size']))
     for turn in range(args.max_turn):
         timer = time.time()
+        # get occupied coord-s for quicker occupation-checks
+        grid.animals = grid.get_simulation_grid_data()
+        grid.occupied_coord = set(zip(grid.animals.coord_x, grid.animals.coord_y))
         grid.play_turn()
         print(''.join(['*'] * sim_config['grid_size'] * 2))
         print('Turn: {turn: ^{size}}'.format(turn=grid._sim_turn, size=sim_config['grid_size']))
