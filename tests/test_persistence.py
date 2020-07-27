@@ -15,7 +15,8 @@ sim_config = {
     'shark_breed_maturity': 5,
     'shark_breed_probability': 100,
     'shark_speed': 4,
-    'shark_starving': 4}
+    'shark_starving': 4
+}
 
 animal_list = [
     (Animal.Fish, SquareGridCoordinate(x=1, y=3)),
