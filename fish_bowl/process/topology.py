@@ -32,15 +32,20 @@ class TopologyError(Exception):
 class SquareGridCoordinate(namedtuple('SquareGridCoordinate', ['x', 'y'])):
     __slots__ = ()
 
-    def move(self, x: int, y: int) -> 'simulation.process.topology.SquareGridCoordinate':
-        return SquareGridCoordinate(x=self.x + x, y=self.y + y)
+    def move(self, x: int, y: int, grid_size: int) -> 'simulation.process.topology.SquareGridCoordinate':
+        '''
+        Make 'topology-agnostic', i.e. let's apply modulo operator
+        '''
+        new_x = (self.x + x) % grid_size
+        new_y = (self.y + y) % grid_size
+        return SquareGridCoordinate(x=new_x, y=new_y)
 
     def __repr__(self):
         return "<x= {:.>3}, y= {:.>3}>".format(self.x, self.y)
 
     def __eq__(self, other):
         if not isinstance(other, SquareGridCoordinate):
-            raise TypeError('Con only compare two SquareGridCoordinate object')
+            raise TypeError('Can only compare two SquareGridCoordinate object')
         return (self.x == other.x) and (self.y == other.y)
 
 
@@ -80,7 +85,7 @@ def square_grid_neighbours(grid_size: int, coordinate: SquareGridCoordinate,
     """
     neigh = []
     for k, (x, y) in SQUARE_NEIGH.items():
-        new_coord = coordinate.move(x, y)
+        new_coord = coordinate.move(x, y, grid_size)
         if square_grid_valid(grid_size=grid_size, coordinates=new_coord, raise_err=False):
             neigh.append(new_coord)
     if shuffle:
